@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { compression } from 'vite-plugin-compression2';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -13,7 +13,13 @@ const app_env = {
   BISHENG_HOST: 'build/apps'
 }
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => {
+  // 从上级目录加载 .env 文件
+  const env = loadEnv(mode, path.resolve(__dirname, '..'), ['VITE_']);
+  const target = env.VITE_PROXY_TARGET || 'http://127.0.0.1:7860';
+  const fileServiceTarget = env.VITE_FILE_SERVICE_TARGET || target;
+
+  return {
   base: app_env.BASE_URL || '/',
   define: {
     __APP_ENV__: JSON.stringify(app_env)
@@ -29,7 +35,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: "http://192.168.106.120:3002",
+        target: fileServiceTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -37,7 +43,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.120:3002',
+        target: target,
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -51,7 +57,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: fileServiceTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -301,7 +307,7 @@ export default defineConfig(({ command }) => ({
       $fonts: path.resolve(__dirname, 'public/fonts'),
     },
   },
-}));
+}});
 
 interface SourcemapExclude {
   excludeNodeModules?: boolean;

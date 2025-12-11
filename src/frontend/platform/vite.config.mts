@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -13,11 +13,6 @@ import svgr from "vite-plugin-svgr";
 */
 const app_env = { BASE_URL: '' } // /custom
 
-// Use environment variable to determine the target.
-//  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
-const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
-const fileServiceTarget = "http://192.168.106.116:9000";
-
 // 公共代理配置
 const commonProxyOptions = {
   changeOrigin: true,
@@ -27,9 +22,9 @@ const commonProxyOptions = {
 };
 
 // 带重写功能的配置生成器
-const createProxyConfig = (target, rewrite = true) => ({
+const createProxyConfig = (proxyTarget, rewrite = true) => ({
   ...commonProxyOptions,
-  target,
+  target: proxyTarget,
   ...(rewrite && {
     rewrite: (path) => path.replace(new RegExp(`^${app_env.BASE_URL}`), '')
   }),
@@ -40,26 +35,30 @@ const createProxyConfig = (target, rewrite = true) => ({
   }
 });
 
-// API路由配置
-const apiRoutes = ["/api/", "/health"];
-const apiProxyConfig = createProxyConfig(target);
-// 文件服务路由配置
-const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
-const fileServiceProxyConfig = createProxyConfig(fileServiceTarget);
+export default defineConfig(({ mode }) => {
+  // 从上级目录加载 .env 文件
+  const env = loadEnv(mode, path.resolve(__dirname, '..'), ['VITE_']);
+  const target = env.VITE_PROXY_TARGET || 'http://127.0.0.1:7860';
+  const fileServiceTarget = env.VITE_FILE_SERVICE_TARGET || target;
 
-const proxyTargets = {};
+  // API路由配置
+  const apiRoutes = ["/api/", "/health"];
+  const apiProxyConfig = createProxyConfig(target);
+  // 文件服务路由配置
+  const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
+  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget);
 
-// 添加API路由代理
-apiRoutes.forEach(route => {
-  proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
-});
-// 添加文件服务路由代理
-fileServiceRoutes.forEach(route => {
-  proxyTargets[`${app_env.BASE_URL}${route}`] = fileServiceProxyConfig;
-});
+  const proxyTargets = {};
 
+  // 添加API路由代理
+  apiRoutes.forEach(route => {
+    proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
+  });
+  // 添加文件服务路由代理
+  fileServiceRoutes.forEach(route => {
+    proxyTargets[`${app_env.BASE_URL}${route}`] = fileServiceProxyConfig;
+  });
 
-export default defineConfig(() => {
   return {
     base: app_env.BASE_URL || '/',
     build: {
@@ -140,6 +139,12 @@ export default defineConfig(() => {
       port: 3001,
       proxy: {
         ...proxyTargets,
+        // 开发环境: 将 /workspace 请求代理到 client 服务
+        '/workspace': {
+          target: 'http://localhost:4001',
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
   };
